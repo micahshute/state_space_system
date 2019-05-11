@@ -342,6 +342,27 @@ classdef System
            w = int(v' * obj.c' * obj.c * v, t, t0, tf);
         end
         
+        
+        function [a,b,c,d] = get_dual(obj)
+            % Get Dual representation of system (dx = a'x + c'u ; y = b'x +
+            % d');
+            a = obj.a';
+            b= obj.c';
+            c = obj.b';
+            d = obj.d';
+        end
+        
+        function obj = to_dual(obj)
+           % Return a new System in the form of the dual of the original
+           % system. Note that the TF will not change
+           [a,b,c,d] = obj.get_dual;
+           obj.a = a;
+           obj.b = b;
+           obj.c = c;
+           obj.d = d;
+        end
+        
+        
     end
     
 end
