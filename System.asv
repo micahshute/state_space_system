@@ -380,7 +380,7 @@ classdef System
            p = poly(obj.a);
         end
         
-        function obj = reduce2(obj)
+        function obj = reduce(obj)
             % Returns a new System object reduced from its old form.
             % IE Cancels zeros and poles
             % Works only for SISO 
@@ -412,14 +412,9 @@ classdef System
             end
         end
         
-        function obj = reduce(obj)
-            % Reduce using MATLAB's built in minreal
-           msys = minreal(obj.sys);
-           [a,b,c,d] = ssdata(msys);
-           obj.a = a;
-           obj.b = b;
-           obj.c = c;
-           obj.d = d;
+        function obj = reduce_v2(obj)
+           msys = minreal(obj.sys)
+           [a,b,c,d] = 
         end
         
         

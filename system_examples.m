@@ -152,6 +152,32 @@ dual_sys = sys.to_dual;
 dual_sys.display_ss % shows A,B,C, and D matrices
 dual_sys.is_controllable % returns false
 dual_sys.is_observable % returns true
+
+% Get tocf 
+
+a = [1,1,0;0,2,1;1,0,0]; b = [1;2;1]; c= [1,2,0]; d = 0;
+sys = System(a,b,c,d);
+tocf = sys.tocf
+% Check above
+[ao,bo,co,do] = sys.get_ocf
+[a,b,c,d] = sys.get_ssxform(tocf)
+a_checks = ao == a
+b_checks = bo == b
+c_checks = co == c
+d_checks = do == d
+
+% Perform pole zero cancellation
+zeros = [-3, -1]
+poles = [-2, -3, -4]
+num = poly(zeros);
+den = poly(poles);
+tfsys = System(num, den);
+tfsys.is_reducable
+reduced_sys = tfsys.reduce;
+new_poles = reduced_sys.poles
+new_zeros = reduced_sys.zeros
+[nnum, nden] = reduced_sys.tf
+
 %% Use System to find an input to get a required output given time and desired input/outputs
 
 hold off; close all; clear; clc;
