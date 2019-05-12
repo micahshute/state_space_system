@@ -126,21 +126,19 @@ classdef System
             t = vec;
         end
 
-        function p = controllability_matrix(obj)
-            % Return the controllability matrix of the system
-            p = ctrb(obj.a, obj.b);
-        end
         
         
         function status = is_controllable(obj)
             % Return a 1/0 flag based on if the system is controllable or
             % not. Print a statement declaring the controlalbility
             sizea = size(obj.a,1);
-            if(rank(obj.controllability_matrix) < sizea)
-                display('System Not Controllable');
+            p = round(obj.p, 7);
+            p_rank = min(rank(p), rank(obj.p));
+            if(p_rank < sizea)
+                display('System is NOT controllable');
                 status = false;
             else
-                display('System Is Controllable');
+                display('System is controllable');
                 status = true;
             end
         end
@@ -297,14 +295,46 @@ classdef System
             p_ccf = inv(obj.ipccf);
         end
         
+        function p = controllability_matrix(obj)
+            % Return the controllability matrix of the system
+            try
+                p = ctrb(obj.a, obj.b);
+            catch
+                s = size(obj.a,1);
+                p = [obj.b];
+                for i = 2:s
+                    p = [p ((obj.a^(i-1)) * obj.b)];
+                end
+            end
+        end
+        
+        
         function p_ret = p(obj)
             % return Controllability Matrix P
-           p_ret = ctrb(obj.a, obj.b);
+           p_ret = obj.controllability_matrix;
+        end
+        
+        function q = observability_matrix(obj)
+            % return Observability matrix
+             try 
+                 
+                 q = obsv(obj.a, obj.c);
+                 
+             catch
+                 
+                 s = size(obj.a,1);
+                 q = [obj.c];
+                 for i = 2:s
+                    q = [q ;(obj.c * (obj.a^(i-1)))];
+                 end
+                 
+             end
+            
         end
         
         function q_ret = q(obj)
             %return Observability matrix Q
-           q_ret = obsv(obj.a, obj.c);
+           q_ret = obj.observability_matrix;
         end
         
         function t_ocf = tocf(obj)
@@ -324,13 +354,15 @@ classdef System
         end
         
         function status  = is_observable(obj)
+           q = round(obj.q,7);
            s = size(obj.a,1);
-           if rank(obj.q) < s
+           q_rank = min( rank(q), rank(obj.q));
+           if q_rank < s
                status = false;
-               display('The system is not observable.');
+               display('System is NOT observable.');
            else
               status = true;
-              display('The system is observable.');
+              display('System is observable.');
            end
         end
         
@@ -431,9 +463,11 @@ classdef System
             zeros = obj.zeros;
             pole_map = containers.Map('KeyType','char','ValueType','logical');
             for i = 1:size(poles);
+               poles(i) = round(poles(i), 7);
                pole_map(num2str(poles(i))) = true;
             end
             for i = 1:size(zeros);
+                zeros(i) = round(zeros(i), 7);
                 if pole_map.isKey(num2str(zeros(i)))
                     flag = true;
                     duplicates = [duplicates zeros(i)];
@@ -449,6 +483,23 @@ classdef System
             end
             
             flag = (sum(s1 == s2) == size(s1,2));
+        end
+        
+        function tfs = ss2tf(obj)
+            % Get TF directly from ss matrices
+           syms s
+           sa = size(obj.a,1);
+           tfs = obj.c * inv(s*eye(sa) - obj.a) * obj.b + obj.d;
+        end
+        
+        function tfs = to_tf(obj)
+            % Get TF object back from SS 
+           syms s
+           sa = size(obj.a,1);
+           tfeq = obj.c * inv(s*eye(sa) - obj.a) * obj.b + obj.d;
+           str = char(tfeq);
+           s = tf('s');
+           eval(['tfs = ',str])
         end
         
     end

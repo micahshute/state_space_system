@@ -178,6 +178,28 @@ new_poles = reduced_sys.poles
 new_zeros = reduced_sys.zeros
 [nnum, nden] = reduced_sys.tf
 
+% Use sym with controllability and observability matrices
+syms c1 c2 c3
+
+a = [1,0,0;0,0,0;0,0,-1];
+c = [c1, c2, c3];
+sys = System(a,[0;0;1], c, 0);
+q = sys.q
+eq = det(q) == 0
+
+syms k1 k2
+
+a = [-6,1;-5,0];
+b = [1;k1];
+c = [1, k2];
+d = 0;
+
+
+% k2 = 0;
+sys = System(a,b,c,d);
+p = sys.p
+eq = det(p) == 0
+solve(eq, k1)
 %% Use System to find an input to get a required output given time and desired input/outputs
 
 hold off; close all; clear; clc;
@@ -376,3 +398,381 @@ hold on
 plot(to, yo)
 title('CL v. OL OUT');
 legend('CL', 'OL')
+
+%% Use System to evaluate controllability and observability of symbolic State Space Equations:
+%% 4 problems below
+%% Problem 1
+hold off; close all; clear; clc;
+
+
+syms c1 c2 c3
+
+a = [1,0,0;0,0,0;0,0,-1];
+c = [c1, c2, c3];
+
+% Part A
+% From the A matrix we can see that the states are
+% decoupled, so any state decoupled from the output 
+% (ie any element of c is zero) would cause the system
+% to become unobservable.
+
+display('Part A')
+display('========= Intuition =======');
+display('Since the states are decoupled, any element of the C matrix being 0 would cause unobservability');
+display('===========================');
+q = [c; c*a; c*a^2]
+
+eqn = det(q) == 0;
+unobservability_eqn = eqn
+
+display('For observable solution, make det = 0');
+unobservable = subs(eqn, [c1,c2,c3], [1,0,3])
+
+display('For observable solution, make det != 0');
+observable = subs(eqn, [c1,c2,c3], [1,2,3])
+display('So, any value of c1, c2, or c3 equaling zero will cause unobservability');
+% Check
+display('=============== Check ===================')
+c1 = [1,0,3];
+if rank(obsv(a,c1)) == 2; disp('Success'); else disp('Fail'); end;
+c1 = [1,2,3];
+if rank(obsv(a,c1)) == 3; disp('Success'); else disp('Fail'); end;
+c1 = [0,199,231];
+if rank(obsv(a,c1)) == 2; disp('Success'); else disp('Fail'); end;
+c1 = [827373,199,0];
+if rank(obsv(a,c1)) == 2; disp('Success'); else disp('Fail'); end;
+display('Check SAT');
+display('-----------------------------------------------------------');
+% Part B
+display('Part B');
+display('Any values of c1, c2, and c3 when none of them are zero cause observability.');
+display('Above shows this with c1,c2,c3 = 1,2,3');
+display('Another Exmaple: c1 = 2, c2 = 4, c3 = 6:');
+c = [2,4,6];
+q = obsv(a,c);
+if rank(q) == 3; disp('Success - Obsevable'); else; disp('Fail - Not Observable'); end;
+display('Proving that c1,c2,c3 = 2,4,6 results in an observable system');
+
+%% Problem 2
+
+hold off; close all; clear; clc;
+
+syms k1 k2
+
+a = [-6,1;-5,0];
+b = [1;k1];
+c = [1, k2];
+d = 0;
+sys = System(a,b,c,d);
+% Part A
+% Is the system controllable for all vaues of k1?
+% k2 = 0;
+display('Part A');
+display('Is the system controllable for all values of k1? (k2 = 0)');
+p = [b, a*b]
+eq = det(p) == 0
+uncontrollable_values = solve(eq, k1)
+display('So, the system is uncontrollable for k = 1,5');
+% Check:
+p = ctrb(a, [1;1]);
+if rank(p) < 2; display('Check 1 success'); else display('Check 1 failure'); end
+p = ctrb(a, [1;5]);
+if rank(p) < 2; display('Check 2 success'); else display('Check 2 failure'); end
+p = ctrb(a, [1;2]);
+if rank(p) < 2; display('Check 3 failure'); else display('Check 3 success'); end
+display('----------------------------------------------------');
+% Part B
+% Is the system observable for all values of k2?
+% k1 = 0
+display('Part B');
+display('Is the system observable for all vaues of k2? (k1 = 0)');
+
+q = sys.q
+eq = det(q) == 0
+unobservable_values = solve(eq, k2)
+display('So, the system is unobservable for k = -1,-0.2');
+% Check:
+p = obsv(a, [1, -1]);
+if rank(p) < 2; display('Check 1 success'); else display('Check 1 failure'); end
+p = obsv(a, [1,-0.2]);
+if rank(p) < 2; display('Check 2 success'); else display('Check 2 failure'); end
+p = obsv(a, [1,-0.5]);
+if rank(p) < 2; display('Check 3 failure'); else display('Check 3 success'); end
+display('------------------------------------------------');
+% Part C
+% For the values of K2 that make the system uncontrollable
+% what is the transfer function of the system?
+display('Part C');
+display('For the values of K1 that made the system uncontrollable, what is the TF of the system?');
+bc1 = double(subs(b, k1, 1));
+bc2 = double(subs(b, k1, 5));
+cc = double(subs(c, k2, 0));
+
+sys_c1 = System(a,bc1,cc,d);
+sys_c2 = System(a,bc2,cc,d);
+[num1, den1] = sys_c1.tf;
+tf_k1_1 = tf(num1, den1)
+[num2, den2] = sys_c2.tf;
+tf_k1_5 = tf(num2, den2)
+% check
+disp('Check');
+if ~sys_c1.is_controllable && ~sys_c2.is_controllable; display('Check SAT'); else display('Check FAILED'); end;
+
+display('----------------------------------------------');
+% Part D 
+% For the values of K2 that make the system unobervable
+% what is the transfer funciton of the system?
+display('Part D');
+display('For the values of K2 that made the system unobservable, what is the TF of the system?');
+bd = double(subs(b, k1, 0));
+cd1 = double(subs(c, k2, -1));
+cd2 = double(subs(c, k2, -0.2));
+
+sys_d1 = System(a,bd, cd1, d);
+sys_d2 = System(a,bd, cd2, d);
+[num1, den1] = sys_d1.tf;
+[num2, den2] = sys_d2.tf;
+
+tf_k2_neg1 = tf(num1, den1)
+tf_k2_negpoint2 = tf(num2, den2)
+% Check
+display('Check:');
+if ~sys_d1.is_observable && ~sys_d2.is_observable; display('Check SAT'); else display('Check FAILED'); end
+
+display('==============================Results================================');
+display('So, the TFs for the unobservable and uncontrollable values of K1 and K2 ended up being the same');
+
+
+%% Poblem 3
+hold off; close all; clear; clc;
+
+syms I m l ddphi phi ddx dx g M b u
+
+eqn1 = (I + m*l^2) * ddphi - m*g*l*phi == m*l *ddx;
+eqn2 = (M+m) * ddx + b * dx - m*l*ddphi == u;
+
+ddphi_sol = solve(eqn1, ddphi);
+ddx_sol = solve(eqn2, ddx);
+ddx_sol_solo = subs(ddx_sol, ddphi, ddphi_sol);
+ddphi_sol_solo = subs(ddphi_sol, ddx, ddx_sol);
+
+ddx_final = simplify(solve(ddx == ddx_sol_solo, ddx))
+ddphi_final = simplify(solve(ddphi == ddphi_sol_solo, ddphi))
+
+display('ddx state eqns:');
+ddx_dx_component = subs(ddx_final, [u, phi, dx], [0,0,1])
+ddx_phi_component = subs(ddx_final, [u, dx, phi], [0,0,1])
+ddx_u_component = subs(ddx_final, [phi, dx, u], [0,0,1])
+
+display('ddphi state eqns:');
+ddphi_dx_component = subs(ddphi_final, [u, phi, dx], [0,0,1])
+ddphi_phi_component = subs(ddphi_final, [u, dx, phi], [0,0,1])
+ddphi_u_component = subs(ddphi_final, [dx, phi, u], [0,0,1])
+
+% Make state equations: states [x1,x2,x3,x4]' = [x,dx,phi,dphi]'
+
+asym = [0,1,0,0;...
+    0,ddx_dx_component,ddx_phi_component, 0;...
+    0,0,0,1;...
+    0, ddphi_dx_component, ddphi_phi_component, 0]
+
+
+bsym = [0; ddx_u_component; 0; ddphi_u_component]
+
+% For two outputs
+display('For angle and cart position outputs');
+c = [1,0,0,0; 0,0,1,0]
+d = [0;0]
+
+% For the pendulum angle ouptut only:
+display('For pendulum angle only');
+c_angle = [0,0,1,0]
+d_angle = 0
+
+% For the cart position output only:
+display('For cart position only');
+c_cart = [1,0,0,0]
+d_cart = 0
+
+% Substitute in values
+Mval = 0.5;
+mval = 0.2;
+bval = 0.1;
+lval = 0.3;
+gval = 9.8;
+Ival = 0.006;
+
+a = double(subs(asym, [M, m, b, l, g, I], [Mval, mval, bval, lval, gval, Ival]))
+b = double(subs(bsym, [M, m, b, l, g, I], [Mval, mval, bval, lval, gval, Ival]))
+
+symSys = System(asym, bsym, c, d);
+symTF = simplify(symSys.ss2tf);
+
+sys_2outs = System(a,b,c,d);
+sys_angleout = System(a,b,c_angle, d_angle);
+sys_cartout = System(a,b,c_cart, d_cart);
+
+% Check observability for just being able to measure cart position
+display('Check observability and controllability for just cart pos. output');
+sys_cartout.is_controllable;
+sys_cartout.is_observable;
+zeros = sys_cartout.zeros
+poles = sys_cartout.poles
+display('---------------------------------------');
+
+% Check observability for just being able to measure pendulum angle
+display('Check observability and controllability for just angle output');
+sys_angleout.is_controllable;
+sys_angleout.is_observable;
+[num, den] = sys_angleout.tf;
+original_tf = tf(num, den)
+zeros = sys_angleout.zeros
+poles = sys_angleout.poles
+% Not observable, so find minimum realization
+display('Reduce System');
+if sys_angleout.is_reducable; display('System is Reducable'); end
+reduced_sys = sys_angleout.reduce;
+[num, den] = reduced_sys.tf;
+reduced_tf = tf(num, den)
+reduced_sys.display_ss
+zeros = reduced_sys.zeros
+poles = reduced_sys.poles
+display('---------------------------------------');
+
+
+% Check observability for being able to measure both outputs
+display('Check Controllability and Observability for an output of both cart position and pendulum angle');
+sys_2outs.is_controllable;
+sys_2outs.is_observable;
+[num, den] = sys_2outs.tf;
+zeros = roots(num(1,:))
+zeros2 = roots(num(2,:))
+poles = sys_2outs.poles
+
+%% Problem 4
+hold off; close all; clear; clc;
+syms beta gamma alpha
+
+% Part A
+
+% System 1 Controllability Mtarix = B = (alpha - beta).
+% Therefore system 1 is contollable if alpha != beta
+% System 1 Observability Matrix = 1, therefore it is observable
+display('System 1')
+sys1 = System([-beta], [alpha-beta], [1], 0);
+p = sys1.p
+q = sys1.q
+controllability_alpha = solve(det(p) == 0, alpha)
+det_q = det(q) % Is always 1 
+
+
+% System 2 Controllability Matrix = B = 1, therefore it is controllable
+% System 2 Observability matrix = C = 1, therefore it is observable
+
+display('System 2')
+sys2 = System([-alpha], [1], [1], 0);
+p = sys2.p % det(p) is always 1 
+q = sys2.q % det(q) is always 1
+display('------------------------------------------------');
+
+
+% Part B
+display('Part B - Systems in series, CCF');
+a = [0,1;-beta*gamma, -(beta+gamma)]; 
+b = [0;1];
+c = [alpha,1];
+
+sym_sys = System(a,b,c,0);
+q = sym_sys.q
+observability_eqn = 0 == det(q)
+alpha_unobservable_vals = solve(observability_eqn, alpha)
+beta_unobservable_vals = solve(observability_eqn, beta)
+gamma_unobservable_vals = solve(observability_eqn, gamma)
+display('Will be unobservable if alpha = beta OR alpha = gamma');
+% Check
+display('Test above conclusion');
+subs(observability_eqn, [alpha, gamma], [10,10])
+subs(observability_eqn, [alpha, beta] , [2.44, 2.44])
+display('Test SAT');
+
+p = sym_sys.p
+controllability_eqn = 0 == det(p)
+display('Always controllable')
+display('Checks with being in Controller Canonical Form');
+display('--------------------------------------------------');
+
+
+% Part C
+display('Part C: Both Systems in series; OCF');
+
+a = [0, -beta*gamma; 1, -(beta+gamma)];
+b = [alpha ; 1];
+c = [0,1];
+d = 0;
+
+sys_ocf = System(a,b,c,d);
+
+p = sys_ocf.p
+q = sys_ocf.q
+
+controllability_eqn = 0 == det(p)
+observability_eqn = 0 == det(q)
+
+uncontrollable_alphas = solve(controllability_eqn, alpha)
+uncontrollable_betas = solve(controllability_eqn, beta)
+uncontrollable_gammas = solve(controllability_eqn, gamma)
+display('So, the system is uncontrollable when alpha = beta OR alpha = gamma')
+display('Check:')
+a_t = double(subs(a, [beta, gamma], [5, 1]));
+b_t1 = double(subs(b, alpha, 5));
+b_t2 = double(subs(b, alpha, 1));
+b_t3 = double(subs(b, alpha, 3));
+systest = System(a_t, b_t1, c,d);
+systest.is_controllable;
+systest.b = b_t2;
+systest.is_controllable;
+systest.b = b_t3;
+systest.is_controllable;
+display('Tests SAT');
+
+display('Observability does not depend on any variables, so the system is always observable');
+display('This checks with the system being in OCF as well as the results of the system in CCF');
+display('---------------------------------------------------------------------------------------------');
+
+% Part D
+
+display('Find minimum realization for situaitons when system was uncontrollable/unobservable');
+display('This occurred when alpha = beta OR alpha = gamma');
+
+b_gsubs = subs(b, alpha, gamma);
+b_bsubs = subs(b, alpha, beta);
+a_bsubs = subs(a, beta, alpha);
+sys_a2g = System(a,b_gsubs,c,d);
+sys_a2b = System(a, b_bsubs, c,d);
+sys_b2a = System(a_bsubs, b, c,d);
+tfsys1 = sys_a2b.ss2tf
+tfsys2 = sys_a2g.ss2tf
+tfsys3 = sys_b2a.ss2tf
+
+tfsys1_simplified = simplify(sys_a2b.ss2tf)
+tfsys2_simplified = simplify(sys_a2g.ss2tf)
+tfsys3_simplified = simplify(sys_b2a.ss2tf) 
+display('Note that tfsys3 is the same as tfsys1 because the same mathematical substitution was made');
+display('The simplified version is 1 / (s + lambda), where lambda = the variable not equal to the other two');
+% Check
+display('=============Check===================')
+display('let alpha = beta = 2.34, gamma = 3')
+display('This aligns with sys_a2b which yielded a reduced form of 1/(s+gamma)');
+aval = 2.34;
+bval = 2.34;
+gval = 3;
+
+
+at = double(subs(a, [beta, gamma], [bval, gval]));
+bt = double(subs(b, alpha, aval));
+syst = System(at,bt,c,d);
+syst.is_controllable;
+red_sys = syst.reduce;
+red_tf = red_sys.to_tf
+display('Got expected value of 1/(s+gamma) = 1/(s+3)');
+display('Check SAT');
