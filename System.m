@@ -502,6 +502,75 @@ classdef System
            eval(['tfs = ',str])
         end
         
+        function l = full_observer_gain(obj, des_eigs)
+            l = place(obj.a', obj.c', des_eigs)';
+        end
+        
+        function [a,b,l] = get_full_observer(obj, des_eigs)
+            % To calculate the full-dimentional Linear State Observer:
+            % Input desired eigenvalues, get back 3 matrices:
+            % Outputs [A-LC, B, L] to form: 
+            % xhatdot(t) = (A-LC) * xhat(t) + Bu(t) + L(y(t))
+            % Where: xhat(t) = state estimates; u(t) = OL sys input;
+            % y(t) = OL sys output
+           l = obj.full_observer_gain(des_eigs);
+           a = obj.a - l * obj.c;
+           b = obj.b;
+        end
+        
+        function l = simulate_full_observer(obj, des_eigs, x0)
+            % Simulate system states with a sin input. 
+            % Can change input and initial conditions manually in simulink
+            % model
+           
+            if nargin < 3 && isa(obj.x0, 'double')
+                x0 = obj.x0;
+            else
+                if nargin < 3 
+                   error('You must either use set_x0 to set initial conditions or add them as an argument')
+                end
+            end
+            l = obj.full_observer_gain(des_eigs);
+            a = obj.a;
+            b = obj.b;
+            css = eye(size(a));
+            dss = [zeros(size(a,1), 1)];
+            c = obj.c;
+            opts = simset('SrcWorkspace', 'current');
+            sim('full_order_observer_simulation', [], opts)
+            figure;
+            plot(dy.time, dy.signals.values)
+            title('y(t) - y_{hat}(t)');
+            xlabel('time {\it(sec)}');
+            figure;
+            plot(y.time, y.signals.values);
+            hold on;
+            plot(yhat.time, yhat.signals.values);
+            title('y(t) vs y_{hat}(t)');
+            legend('y(t)', 'y_{hat}(t)');
+            xlabel('time {\it(sec)}');
+            number_states = xsys.signals.dimensions;
+            for i = 1:number_states
+                
+               figure;
+               plot(xsys.time, xsys.signals.values(:,i));
+               hold on
+               plot(xhat.time, xhat.signals.values(i,:));
+               title(strcat('x_',num2str(i),'(t) vs x_{hat_',num2str(i),'}(t)'));
+               legend(strcat('x_',num2str(i),'(t)'), strcat('x_{hat_',num2str(i),'}(t)'));
+               xlabel('time {\it(sec)}');
+            end
+            
+        end
+        
+        function is_stabilizable(obj)
+            
+        end
+        
+        function is_detectable(obj)
+            
+        end
+        
     end
     
 end

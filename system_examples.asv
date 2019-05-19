@@ -213,26 +213,21 @@ sys = System(a,b,c,d);
 
 des_eigs = [-1,-2,-3];
 [ao, bo, l] = sys.get_full_observer(des_eigs)
-% See full_order_observer_simulation.slx
-% Plot out states vs observed states. Can set
-% System initial conditions in the arguemnts of
-% simulate_full_observer, can set observer inital conditions
-% directly in simulink.
-sys.simulate_full_observer(des_eigs, [1,-1,1])
+% See full_order_observer_example.slx
 
 %% Reduced-Order Observer
 clear; clc
 
-a = [0,1,0;0,0,1;-4,-4,-1];
+a = [0,1,0;0,0,1;-10,17,-8];
 b = [0;0;1];
-c = [1,0,0];
+c = [1,1,1];
 d = 0;
-des_eigs = [-5,-5];
+des_eigs = [-10,-10];
 
 psize = size(c,1)
 nsize = size(c,2)
 
-tinv = [c; 0,1,0;0,0,1];
+tinv = [c; 1,0,0;0,1,0];
 t = inv(tinv);
 
 sys = System(a,b,c,d);
@@ -280,16 +275,10 @@ m = b2 - l*b1
 
 
 e = tinv((nsize-psize):end, :);
-tp = t(:, 1:psize);
-tq = t(:, psize + 1:end);
+p = t(:, 1:psize);
+q = t(:, psize + 1:end);
 
-ap = a*tp
-e_m_lc = e - l*c
-b = b
-tq = tq
-aq = a*tq
-l = l
-tp = tp
+
 
 
 %% Use System to find an input to get a required output given time and desired input/outputs
