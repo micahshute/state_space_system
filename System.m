@@ -68,6 +68,10 @@ classdef System
             outsys = ss(obj.a,obj.b,obj.c,obj.d);
         end
         
+        function [z,p,k] = zpk(obj)
+           [z,p,k] = zpkdata(obj.sys, 'v'); 
+        end
+        
         function [num, den] = tf(obj)
             %return the TF of the system as 2 vectors reprisenting 
             % the num and den
