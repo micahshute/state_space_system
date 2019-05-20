@@ -368,7 +368,7 @@ classdef System
         
         
         function w = obs_gram(obj, tf, t0)
-            
+            % Return the Observability Gramian
             if(nargin <= 1)
                syms tf
             end
@@ -503,6 +503,7 @@ classdef System
         end
         
         function l = full_observer_gain(obj, des_eigs)
+            % Get the gain L for a full order Observer
             l = place(obj.a', obj.c', des_eigs)';
         end
         
@@ -518,7 +519,7 @@ classdef System
            b = obj.b;
         end
         
-        function l = simulate_full_observer(obj, des_eigs, x0)
+        function [y, yhat, xsys, xhat] = simulate_full_observer(obj, des_eigs, x0)
             % Simulate system states with a sin input. 
             % Can change input and initial conditions manually in simulink
             % model
@@ -545,7 +546,7 @@ classdef System
             figure;
             plot(y.time, y.signals.values);
             hold on;
-            plot(yhat.time, yhat.signals.values);
+            plot(yhat.time, yhat.signals.values, 'r--');
             title('y(t) vs y_{hat}(t)');
             legend('y(t)', 'y_{hat}(t)');
             xlabel('time {\it(sec)}');
@@ -555,7 +556,7 @@ classdef System
                figure;
                plot(xsys.time, xsys.signals.values(:,i));
                hold on
-               plot(xhat.time, xhat.signals.values(i,:));
+               plot(xhat.time, xhat.signals.values(i,:), 'r--');
                title(strcat('x_',num2str(i),'(t) vs x_{hat_',num2str(i),'}(t)'));
                legend(strcat('x_',num2str(i),'(t)'), strcat('x_{hat_',num2str(i),'}(t)'));
                xlabel('time {\it(sec)}');
@@ -563,23 +564,77 @@ classdef System
             
         end
         
-        function [l,j,n,m,t] = get_untransformed_observer(obj, des_eigs)
+        function [y, yhat, xsys, xhat] = get_simulation_full_observer(obj, des_eigs, x0)
+             if (nargin < 3) && (size(obj.x0,1) > 0)
+                x0 = obj.x0;
+            else
+                if nargin < 3 
+                   error('You must either use set_x0 to set initial conditions or add them as an argument')
+                end
+            end
+            l = obj.full_observer_gain(des_eigs);
+            a = obj.a;
+            b = obj.b;
+            css = eye(size(a));
+            dss = [zeros(size(a,1), 1)];
+            c = obj.c;
+            opts = simset('SrcWorkspace', 'current');
+            sim('full_order_observer_simulation', [], opts)
+            
+        end
+        
+        function [l,j,n,m,t] = get_untransformed_reduced_observer(obj, des_eigs)
+            % Gives the information to get a the reduced order observer
+            % estimate of xhat(t):
+            % wdot(t) = Jw(t)+Ny(t)+Mu(t)
+            % zhat2(t) = Ly(t) + w(t) ; zhat1(t) = y(t)
+            % xhat(t) = Tzhat(t)
             [t,l,e,pt,qt,j,m,n] = obj.get_all_reduced_observer_info(des_egs)
         end
         
         function [t,l,p,q,e_m_lc, aq, ap] = get_reduced_observer(obj, des_eigs)
+            % Gives the information to get xhat(t) from the following set of equations:
+            % w(t) = (E-LC)[AQzhat2(t) + APy(t)+Bu(t)]
+            % zhat2(t) = Ly(t) + w(t)
+            % xhat(t) = Py(t) + Qzhat2(t)
+            % WHERE:
+            % [C;E] = inv(T) ; T = [P Q] (P and Q are NOT
+            % controllability/invertability matrix). 
+            % e_m_lc = (E-LC); aq = AQ; ap = AP; p = P; q = Q; l = L;
+            % NOTE: This is the system used in the simulink model above
             [t,l,e,p,q,j,m,n] = obj.get_all_reduced_observer_info(des_eigs);
             ap = obj.a*p;
             e_m_lc = e - l*obj.c;
             aq = obj.a*q;
         end
         
-        function simulate_reduced_observer(obj, des_eigs, x0)
+        function [y, yhat, xsys, xhat] = get_simulation_reduced_observer(obj, des_eigs, x0)
+            % Simulate system with a sin input, return simulation outputs
+            % y, yhat, xsys, xhat
+            if (nargin < 3) && (size(obj.x0,1) > 0)
+                x0 = obj.x0;
+            else
+                if nargin < 3 
+                   error('You must either use set_x0 to set initial conditions or add them as an argument')
+                end
+            end
             [t,l,pt,qt,e_m_lc, aq, ap] = obj.get_reduced_observer(des_eigs);
+            a = obj.a;
+            b = obj.b;
+            css = eye(size(a));
+            dss = [zeros(size(a,1), 1)];
+            c = obj.c;
+            opts = simset('SrcWorkspace', 'current');
+            sim('reduced_order_observer_simulation', [], opts)
+            xhat.signals.values = xhat.signals.values(:,:)';
+        end
+        
+        function [y, yhat, xsys, xhat] = simulate_reduced_observer(obj, des_eigs, x0)
+            
             % Simulate system states with a sin input. 
             % Can change input and initial conditions manually in simulink
             % model
-
+            [t,l,pt,qt,e_m_lc, aq, ap] = obj.get_reduced_observer(des_eigs);
             if (nargin < 3) && (size(obj.x0,1) > 0)
                 x0 = obj.x0;
             else
@@ -597,23 +652,40 @@ classdef System
             sim('reduced_order_observer_simulation', [], opts)
             figure;
             plot(y.time, y.signals.values);
-            title('y(t)');
+            hold on;
+            plot(yhat.time, yhat.signals.values, 'r--');
+            title('y(t) vs y_{hat}(t)');
+            legend('y(t)', 'y_{hat}(t)');
             xlabel('time {\it(sec)}');
             number_states = xsys.signals.dimensions;
+            xhat.signals.values = xhat.signals.values(:,:)';
             for i = 1:number_states
-                
                figure;
                plot(xsys.time, xsys.signals.values(:,i));
                hold on
-               plot(xhat.time, xhat.signals.values(i,:));
+               plot(xhat.time, xhat.signals.values(:,i), 'r--');
                title(strcat('x_',num2str(i),'(t) vs x_{hat_',num2str(i),'}(t)'));
                legend(strcat('x_',num2str(i),'(t)'), strcat('x_{hat_',num2str(i),'}(t)'));
                xlabel('time {\it(sec)}');
+               
             end
-            
         end
         
         function [t,l,e,pt,qt,j,m,n] = get_all_reduced_observer_info(obj, des_eigs)
+            % Calculate all necessary matrices to create a reduced order
+            % observer:
+            % Gives enough information to use the following system:
+            % w(t) = (E-LC)[AQzhat2(t) + APy(t)+Bu(t)]
+            % zhat2(t) = Ly(t) + w(t)
+            % xhat(t) = Py(t) + Qzhat2(t)
+            % WHERE:
+            % [C;E] = inv(T) ; T = [P Q] (P and Q are NOT
+            % controllability/invertability matrix). 
+            % NOTE: This is the system used in the simulink model above
+            % OR: 
+            % wdot(t) = Jw(t)+Ny(t)+Mu(t)
+            % zhat2(t) = Ly(t) + w(t) ; zhat1(t) = y(t)
+            % xhat(t) = Tzhat(t)
             tinv = obj.c;
             psize = size(obj.c,1);
             nsize = size(obj.c,2);
@@ -626,12 +698,15 @@ classdef System
             e = tinv((nsize-psize):end, :);
             pt = t(:, 1:psize);
             qt = t(:, psize + 1:end);
-            [aa,bb,cc,dd] = obj.get_ssxform(t);
-            
-            a11 = aa(1:psize, 1:psize);
-            a12 = aa(1:psize,(nsize-psize):nsize);
-            a21 = aa((nsize-psize):nsize,1:psize);
-            a22 = aa((nsize-psize):nsize,(nsize-psize):nsize);
+            %[aa,bb,cc,dd] = obj.get_ssxform(t);
+            %a11 = aa(1:psize, 1:psize);
+            %a12 = aa(1:psize,(nsize-psize):nsize);
+            %a21 = aa((nsize-psize):nsize,1:psize);
+            %a22 = aa((nsize-psize):nsize,(nsize-psize):nsize);
+            a11 = obj.c * obj.a * pt;
+            a12 = obj.c * obj.a * qt;
+            a21 = e * obj.a * pt;
+            a22 = e * obj.a * qt;
             b1 = obj.b(1:psize,1);
             b2 = obj.b((nsize-psize):end, 1);
             try 

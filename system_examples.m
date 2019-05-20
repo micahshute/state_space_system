@@ -222,93 +222,54 @@ sys = sys.set_x0([1,-1,1]);
 sys.simulate_full_observer(des_eigs);
 %or: sys.simulate_full_observer(des_eigs, [1,-1,1]);
 
-%% Reduced-Order Observer WITHOUT system
-clear; clc
-
-a = [0,1,0;0,0,1;-4,-4,-1];
-b = [0;0;1];
-c = [1,0,0];
-d = 0;
-des_eigs = [-5,-5];
-
-psize = size(c,1)
-nsize = size(c,2)
-
-tinv = [c; .1,1,100;1,25,1];
-t = inv(tinv);
-
-sys = System(a,b,c,d);
-tsys = sys.xform(t);
-tsys.display_ss
-
-a11 = tsys.a(1:psize, 1:psize);
-a12 = tsys.a(1:psize,(nsize-psize):nsize);
-a21 = tsys.a((nsize-psize):nsize,1:psize);
-a22 = tsys.a((nsize-psize):nsize,(nsize-psize):nsize);
-b1 = b(1:psize,1);
-b2 = b((nsize-psize):end, 1);
-try 
-    l = place(a22', a12', des_eigs)';
-catch 
-    try
-        % Try ackermann's instead. If this doesn't work (ie system > 1
-        % output), then slightly change pole location to eliminate
-        % duplicates via algorithm below.
-        l = acker(a22', a12', des_eigs)';
-    catch
-        
-        % For duplicate poles, place will not work. So, change them
-        % slightly to allow the algorithm to place the poles. 
-        dev = 0.00000000001;
-        sign = -1;
-        for i = 1:size(des_eigs)
-           des_eigs(i) = des_eigs(i) + sign * ceil(i / 2) * dev;
-           sign = sign * -1;
-        end
-        l = place(a22', a12', des_eigs)';
-    end
-end
-l
-j = a22 - l*a12
-% Test pole location
-% eig(j) --> checks
-n = a21 + j*l - l*a11
-m = b2 - l*b1
-
-% 2 ways to do state system: 
-% use wdot = Jw + Ny + Mu and zhat = Ly + w to
-% get zhat and then transform using t to get xhat. 
-% OR
-% use xhat = Py + Qzhat; zhat = Ly + w; wdot = (E-LC)[AQzhat + APy +Bu]
-
-
-e = tinv((nsize-psize):end, :);
-tp = t(:, 1:psize);
-tq = t(:, psize + 1:end);
-
-ap = a*tp
-e_m_lc = e - l*c
-b = b
-qt = tq
-aq = a*tq
-l = l
-pt = tp
-x0 = [1,-1,1];
-css = eye(size(a,1));
-dss = [zeros(size(a,1), 1)];
-
-opts = simset('SrcWorkspace', 'current');
-sim('reduced_order_observer_simulation', [], opts)
  
 %% Reduced Order Observer WTIH System
 hold off; close all; clear; clc;
-a = [0,1,0;0,0,1;-4,-4,-1];
+a = [0,1,0;0,0,1;-10,-17,-8];
 b = [0;0;1];
-c = [1,0,0];
+c = [1,1,1];
 d = 0;
-des_eigs = [-5,-5];
+des_eigs = [-10,-10];
 sys = System(a,b,c,d);
-sys.simulate_reduced_observer(des_eigs, [1,-1,1])
+[y, yhat, xsys, xhat] = sys.simulate_reduced_observer(des_eigs, [1,-1,1]);
+plot(xsys.time, xsys.signals.values(:,1) - xhat.signals.values(:,1))
+
+%% Full Order and Reduced Order Observers of same system:
+
+%% Full Order
+hold off; close all; clear; clc;
+
+a = [-7,1,15;-2,0,5;-2,0,4];
+b = [65;-5;30];
+c = [1,0,2];
+d = 0;
+
+sys = System(a,b,c,d);
+
+des_eigs = [-5,-6,-7];
+sys = sys.set_x0([0;0;1]);
+
+sys.simulate_full_observer(des_eigs);
+
+[ao,bo,l] = sys.get_full_observer(des_eigs)
+eigs_check = eigs(ao)
+
+%% Reduced Order
+hold off; close all; clear; clc;
+
+a = [-7,1,15;-2,0,5;-2,0,4];
+b = [65;-5;30];
+c = [1,0,2];
+d = 0;
+
+sys = System(a,b,c,d);
+
+des_eigs = [-6,-7];
+sys = sys.set_x0([0;0;1]);
+
+sys.simulate_reduced_observer(des_eigs);
+
+[t,l,p,q,e_m_lc, aq, ap] = sys.get_reduced_observer(des_eigs)
 
 %% Use System to find an input to get a required output given time and desired input/outputs
 
