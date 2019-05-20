@@ -69,6 +69,7 @@ classdef System
         end
         
         function [z,p,k] = zpk(obj)
+            % Return zeros, poles, gain data for system
            [z,p,k] = zpkdata(obj.sys, 'v'); 
         end
         
