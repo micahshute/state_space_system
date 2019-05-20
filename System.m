@@ -523,7 +523,7 @@ classdef System
             % Can change input and initial conditions manually in simulink
             % model
            
-            if nargin < 3 && isa(obj.x0, 'double')
+            if (nargin < 3) && (size(obj.x0,1) > 0)
                 x0 = obj.x0;
             else
                 if nargin < 3 
@@ -561,6 +561,146 @@ classdef System
                xlabel('time {\it(sec)}');
             end
             
+        end
+        
+        function [l,j,n,m,t] = get_untransformed_observer(obj, des_eigs)
+            [t,l,e,pt,qt,j,m,n] = obj.get_all_reduced_observer_info(des_egs)
+        end
+        
+        function [t,l,p,q,e_m_lc, aq, ap] = get_reduced_observer(obj, des_eigs)
+            [t,l,e,p,q,j,m,n] = obj.get_all_reduced_observer_info(des_eigs);
+            ap = obj.a*p;
+            e_m_lc = e - l*obj.c;
+            aq = obj.a*q;
+        end
+        
+        function simulate_reduced_observer(obj, des_eigs, x0)
+            [t,l,pt,qt,e_m_lc, aq, ap] = obj.get_reduced_observer(des_eigs);
+            % Simulate system states with a sin input. 
+            % Can change input and initial conditions manually in simulink
+            % model
+
+            if (nargin < 3) && (size(obj.x0,1) > 0)
+                x0 = obj.x0;
+            else
+                if nargin < 3 
+                   error('You must either use set_x0 to set initial conditions or add them as an argument')
+                end
+            end
+     
+            a = obj.a;
+            b = obj.b;
+            css = eye(size(a));
+            dss = [zeros(size(a,1), 1)];
+            c = obj.c;
+            opts = simset('SrcWorkspace', 'current');
+            sim('reduced_order_observer_simulation', [], opts)
+            figure;
+            plot(y.time, y.signals.values);
+            title('y(t)');
+            xlabel('time {\it(sec)}');
+            number_states = xsys.signals.dimensions;
+            for i = 1:number_states
+                
+               figure;
+               plot(xsys.time, xsys.signals.values(:,i));
+               hold on
+               plot(xhat.time, xhat.signals.values(i,:));
+               title(strcat('x_',num2str(i),'(t) vs x_{hat_',num2str(i),'}(t)'));
+               legend(strcat('x_',num2str(i),'(t)'), strcat('x_{hat_',num2str(i),'}(t)'));
+               xlabel('time {\it(sec)}');
+            end
+            
+        end
+        
+        function [t,l,e,pt,qt,j,m,n] = get_all_reduced_observer_info(obj, des_eigs)
+            tinv = obj.c;
+            psize = size(obj.c,1);
+            nsize = size(obj.c,2);
+            for i = (psize + 1):nsize
+               vec = obj.get_linearlly_independent_vector(tinv);
+               tinv = [tinv; vec];
+            end
+            
+            t = inv(tinv);
+            e = tinv((nsize-psize):end, :);
+            pt = t(:, 1:psize);
+            qt = t(:, psize + 1:end);
+            [aa,bb,cc,dd] = obj.get_ssxform(t);
+            
+            a11 = aa(1:psize, 1:psize);
+            a12 = aa(1:psize,(nsize-psize):nsize);
+            a21 = aa((nsize-psize):nsize,1:psize);
+            a22 = aa((nsize-psize):nsize,(nsize-psize):nsize);
+            b1 = obj.b(1:psize,1);
+            b2 = obj.b((nsize-psize):end, 1);
+            try 
+                l = place(a22', a12', des_eigs)';
+            catch 
+                try
+                    % Try ackermann's instead. If this doesn't work (ie system > 1
+                    % output), then slightly change pole location to eliminate
+                    % duplicates via algorithm below.
+                    l = acker(a22', a12', des_eigs)';
+                catch
+
+                    % For duplicate poles, place will not work. So, change them
+                    % slightly to allow the algorithm to place the poles. 
+                    dev = 0.00000000001;
+                    sign = -1;
+                    for i = 1:size(des_eigs)
+                       des_eigs(i) = des_eigs(i) + sign * ceil(i / 2) * dev;
+                       sign = sign * -1;
+                    end
+                    l = place(a22', a12', des_eigs)';
+                end
+            end
+            j = a22 - l*a12;
+            % Test pole location
+            % eig(j) --> checks
+            n = a21 + j*l - l*a11;
+            m = b2 - l*b1;
+        end
+        
+        function vec = get_linearlly_independent_vector(obj, mat)
+            % Create a random linearlly indpenedent vector to add to a give
+            % matrix to facilitate making the state transformation matrix 
+            % T = [C;E] for the reduced observer system. 
+            rows = size(mat, 1);
+            cols = size(mat, 2);
+            attempt = 1;
+            while 1
+               vec = obj.rand_vec(attempt, mat); 
+               reduced = rref([mat; vec]);
+               success = true;
+               for row = 1:(rows + 1)
+                  if sum(reduced(row, :)) == 0
+                     attempt = attempt + 1;
+                     success = false;
+                     break;
+                  end
+               end
+               if success
+                   break;
+               end
+            end
+        end
+        
+        function vec = rand_vec(obj, attempt, mat)
+            rows = size(mat, 1);
+            cols = size(mat, 2);
+            if attempt <= cols
+                % Attempt a single direction first (ie eye matrix if
+                % possible)
+                vec = zeros(1, cols);
+                vec(attempt) = 1;
+            else
+                % Create a random vector
+                vec = zeros(1, cols);
+                for i = 1:cols
+                    vec(i) = 100 * rand;
+                end
+            end
         end
         
         function is_stabilizable(obj)

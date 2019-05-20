@@ -218,9 +218,11 @@ des_eigs = [-1,-2,-3];
 % System initial conditions in the arguemnts of
 % simulate_full_observer, can set observer inital conditions
 % directly in simulink.
-sys.simulate_full_observer(des_eigs, [1,-1,1])
+sys = sys.set_x0([1,-1,1]);
+sys.simulate_full_observer(des_eigs);
+%or: sys.simulate_full_observer(des_eigs, [1,-1,1]);
 
-%% Reduced-Order Observer
+%% Reduced-Order Observer WITHOUT system
 clear; clc
 
 a = [0,1,0;0,0,1;-4,-4,-1];
@@ -232,18 +234,19 @@ des_eigs = [-5,-5];
 psize = size(c,1)
 nsize = size(c,2)
 
-tinv = [c; 0,1,0;0,0,1];
+tinv = [c; .1,1,100;1,25,1];
 t = inv(tinv);
 
 sys = System(a,b,c,d);
 tsys = sys.xform(t);
 tsys.display_ss
-a11 = tsys.a(1);
-a12 = tsys.a(1,2:3);
-a21 = tsys.a(2:3,1);
-a22 = tsys.a(2:3,2:3);
-b1 = b(1,1);
-b2 = b(2:end, 1);
+
+a11 = tsys.a(1:psize, 1:psize);
+a12 = tsys.a(1:psize,(nsize-psize):nsize);
+a21 = tsys.a((nsize-psize):nsize,1:psize);
+a22 = tsys.a((nsize-psize):nsize,(nsize-psize):nsize);
+b1 = b(1:psize,1);
+b2 = b((nsize-psize):end, 1);
 try 
     l = place(a22', a12', des_eigs)';
 catch 
@@ -286,11 +289,26 @@ tq = t(:, psize + 1:end);
 ap = a*tp
 e_m_lc = e - l*c
 b = b
-tq = tq
+qt = tq
 aq = a*tq
 l = l
-tp = tp
+pt = tp
+x0 = [1,-1,1];
+css = eye(size(a,1));
+dss = [zeros(size(a,1), 1)];
 
+opts = simset('SrcWorkspace', 'current');
+sim('reduced_order_observer_simulation', [], opts)
+ 
+%% Reduced Order Observer WTIH System
+hold off; close all; clear; clc;
+a = [0,1,0;0,0,1;-4,-4,-1];
+b = [0;0;1];
+c = [1,0,0];
+d = 0;
+des_eigs = [-5,-5];
+sys = System(a,b,c,d);
+sys.simulate_reduced_observer(des_eigs, [1,-1,1])
 
 %% Use System to find an input to get a required output given time and desired input/outputs
 
@@ -334,8 +352,6 @@ plot(t, xout(:,2))
 plot(t, xout(:,3))
 legend('x1','x2','x3')
 title('State Values')
-
-
 
 %% Use System to make a Closed Loop system.
 
