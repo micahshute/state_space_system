@@ -394,13 +394,10 @@ c=[0 10 10];
 d=0;
 sys = System(a,b,c,d);
 
-oeigs = [-30, -40];
-peigs = [-8+8i,-8-8i,-24];
+oeigs = [];
+peigs = [];
 
-csys = sys.to_reduced_observer_controller(oeigs, peigs);
-[t,l,e,pt,qt,j,m,n] = sys.get_all_reduced_observer_info(oeigs)
-
-csys.poles
+csys = sys.to_reduced_observer_controller(oeigs, peigs, x0);
 
 
 %% Use System to find an input to get a required output given time and desired input/outputs

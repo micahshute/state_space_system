@@ -109,17 +109,6 @@ classdef System
             obj.c = t_c;
             obj.d = t_d;
         end
-        
-        
-        function [ damping_ratio, damping_angle ] = damp_from_po(obj, po )
-        %DAMP_FROM_PO Pass in max percent overshoot, get back minimum damping coeff
-        % If two returns are requested, you also get the damping_angle (maximum
-        % angle)
-            damping_ratio = abs(log(po / 100)) / sqrt(pi^2 + log(po/100)^2);
-            damping_angle = acos(damping_ratio);
-            %damping_angle = vpa(damping_angle, 5);
-        end
-
        
         function vals = eigenvalues(obj)
             % Return the eigenvalues of the system
@@ -272,10 +261,6 @@ classdef System
             obj.a = obj.a - obj.b * k;
         end
         
-        function stepinfo(obj)
-           stepinfo(obj.sys)
-        end
-        
         function [k, an, bn] = servocontroller_gain(obj, des_eigs)
             % Return the gain and A and B matrices of a servocontroller
             % design of the current system. The A and B values are the ones
@@ -283,32 +268,7 @@ classdef System
             aug_zeros = zeros(1,size(obj.a,1))';
             an = [obj.a, aug_zeros; -obj.c, 0];
             bn = [obj.b;0];
-            k = obj.try_place(an, bn, des_eigs);
-        end
-        
-        function gain = try_place(obj,a,b,eigs)
-            try 
-                gain = place(a, b, eigs);
-            catch 
-                try
-                    % Try ackermann's instead. If this doesn't work (ie system > 1
-                    % output), then slightly change pole location to eliminate
-                    % duplicates via algorithm below.
-                    gain = acker(a, b, eigs);
-                catch
-
-                    % For duplicate poles, place will not work. So, change them
-                    % slightly to allow the algorithm to place the poles. 
-                    dev = 0.00000000001;
-                    sign = -1;
-                    for i = 1:size(eigs)
-                       eigs(i) = eigs(i) + sign * ceil(i / 2) * dev;
-                       sign = sign * -1;
-                    end
-                    gain = place(a, b, eigs);
-                end
-            end
-            
+            k = place(an, bn, des_eigs);
         end
         
         function obj = servocontroller(obj, des_eigs)
@@ -771,12 +731,17 @@ classdef System
             e = tinv((nsize-psize):end, :);
             pt = t(:, 1:psize);
             qt = t(:, psize + 1:end);
+            %[aa,bb,cc,dd] = obj.get_ssxform(t);
+            %a11 = aa(1:psize, 1:psize);
+            %a12 = aa(1:psize,(nsize-psize):nsize);
+            %a21 = aa((nsize-psize):nsize,1:psize);
+            %a22 = aa((nsize-psize):nsize,(nsize-psize):nsize);
             a11 = obj.c * obj.a * pt;
             a12 = obj.c * obj.a * qt;
             a21 = e * obj.a * pt;
             a22 = e * obj.a * qt;
-            %b1 = obj.b(1:psize,1);
-            %b2 = obj.b((nsize-psize):end, 1);
+            b1 = obj.b(1:psize,1);
+            b2 = obj.b((nsize-psize):end, 1);
             try 
                 l = place(a22', a12', des_eigs)';
             catch 
@@ -802,8 +767,7 @@ classdef System
             % Test pole location
             % eig(j) --> checks
             n = a21 + j*l - l*a11;
-            %m = b2 - l*b1;
-            m = (e - l*obj.c)*obj.b;
+            m = b2 - l*b1;
         end
         
         function vec = get_linearlly_independent_vector(obj, mat)
@@ -952,6 +916,7 @@ classdef System
            % xhat(t). Or, you can use the
            % get_simulated_reduced_observer_controller method below which
            % will give you xhat values. 
+           obj = obj.to_ocf;
            [t,l,e,pt,qt,j,m,n] = obj.get_all_reduced_observer_info(obs_eigs);
            k = obj.get_control_gain(cont_eigs);
            aa = [obj.a - obj.b *k*(pt + qt*l)*obj.c,...
@@ -961,6 +926,13 @@ classdef System
            bb = [obj.b;m];
            cc = [obj.c, zeros(1, size(aa,2) - size(obj.c,2))];
            dd = 0;
+           %aa = [obj.a - obj.b *k*(pt + qt*l)*obj.c,...
+           %    -obj.b*k*qt;...
+           %    (e-l*obj.c)*(obj.a*qt*l*obj.c+obj.a*pt*obj.c-obj.b*k*pt*obj.c-obj.b*k*qt*l*obj.c),...
+           %    (e-l*obj.c)*(obj.a*qt - k*obj.b*qt)];
+           %bb = [obj.b;(e-l*obj.c) * obj.b];
+           %cc = [obj.c, zeros(1, size(aa,2) - size(obj.c,2))];
+           %dd = 0;
            obj.a = aa;
            obj.b = bb;
            obj.c = cc;
@@ -1135,11 +1107,12 @@ classdef System
            % below wil simulate via a simulink simulation.
            % The states will be: x(t) (n states),zeta, w(t) (n-1 states). See description of w(t) above
            % in the to_reduced_observer_controller method description.
+           obj = obj.to_ocf;
            [t,l,e,pt,qt,j,m,n] = obj.get_all_reduced_observer_info(oeigs);
            k = obj.servocontroller_gain(ceigs);
            % Separate controller gain from servocontroller gain
-           ki = -k(end);
-           k = k(1:end-1);
+           ki = -k(end)
+           k = k(1:end-1)
            aa = [obj.a - obj.b *k*(pt + qt*l)*obj.c, obj.b * ki, -obj.b*k*qt;...
                -obj.c, zeros(size(obj.c,1),size(obj.b,2)), zeros(size(obj.c,1), size(obj.b*k,2) - 1);...
                -m*k*(pt+qt*l)*obj.c + n*obj.c, m*ki, j-m*k*qt];
@@ -1153,7 +1126,7 @@ classdef System
         end
         
         
-        function simulate_reduced_compensator(obj, ceigs, oeigs, x0)
+        function simulte_reduced_compensator(obj, ceigs, oeigs)
            % Input controller eigenvalues (n+1 because there is servocontroller ss tracking), 
            % and observer eigenvalues (n-1 because the observer is reduced
            % order. There is no sister method for this which returns the
@@ -1161,60 +1134,7 @@ classdef System
            % manual simulation, which will have states x(t) (n states),
            % w(t) (n-1 states). The xhat(t) values can be harvested via the
            % relationships zhat2(t) = Ly(t) + w(t) ; 
-           % xhat(t) = Py(t) + Qzhat2(t), where P and Q can be obtained from
-           % the method .get_reduced_observer (NOTE P and Q are NOT the
-           % controllability and observability matrices in this instance)
-           
-           if (nargin < 4) && (size(obj.x0,1) > 0)
-                x0 = obj.x0;
-            else
-                if nargin < 4
-                    x0 = zeros(size(obj.c));
-                   %error('You must either use set_x0 to set initial conditions or add them as an argument')
-                end
-            end
-           
-           
-           [t,l,pt,qt,e_m_lc, aq, ap] = obj.get_reduced_observer(oeigs);
-           k = obj.servocontroller_gain(ceigs);
-           % Separate controller gain from servocontroller gain
-           ki = -k(end);
-           k = k(1:end-1);
-           a = obj.a;
-            b = obj.b;
-            css = eye(size(a));
-            dss = [zeros(size(a,1), 1)];
-            c = obj.c;
-            opts = simset('SrcWorkspace', 'current');
-            sim('reduced_compensator_simulation', [], opts)
-            figure;
-            dy = y.signals.values - yhat.signals.values;
-            plot(y.time, dy)
-            title('y(t) - y_{hat}(t)');
-            xlabel('time {\it(sec)}');
-            figure;
-            plot(y.time, y.signals.values);
-            hold on;
-            plot(yhat.time, yhat.signals.values, 'r--');
-            plot(yol.time, yol.signals.values, 'g--');
-            title('y(t) vs y_{hat}(t)');
-            legend('y(t)', 'y_{hat}(t)', 'y_{ol}(t)');
-            xlabel('time {\it(sec)}');
-            number_states = xsys.signals.dimensions;
-            xsys.signals.values = xsys.signals.values(:,:)';
-            xhat.signals.values = xhat.signals.values(:,:)';
-            %xol.signals.values = xol.signals.values(:,:)';
-            for i = 1:number_states
-                
-               figure;
-               plot(xsys.time, xsys.signals.values(:,i));
-               hold on
-               plot(xhat.time, xhat.signals.values(:,i), 'r--');
-               plot(xol.time, xol.signals.values(:,i), 'g--');
-               title(strcat('x_',num2str(i),'(t) vs x_{hat_',num2str(i),'}(t)'));
-               legend(strcat('x_',num2str(i),'(t)'), strcat('x_{hat_',num2str(i),'}(t)'),strcat('x_{ol_',num2str(i),'}(t)'));
-               xlabel('time {\it(sec)}');
-            end
+           % xhat(t) = Py(t) + Qzhat2(t)
             
         end
             
