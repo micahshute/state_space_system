@@ -446,6 +446,110 @@ plot(t, xout(:,3))
 legend('x1','x2','x3')
 title('State Values')
 
+
+%%
+%% Signals & Systems Final
+hold off; close all; clear; clc;
+%% Part A
+num = [10];
+den = [1 9 26 24];
+sys = System(num, den);
+sys = sys.to_ccf;
+sys.display_ss
+
+damp_rat = 1 / sqrt(2); % "Optimal Damping damping 
+% ratio of 1/sqrt(2)
+ts = 0.5; % 2% Settling Time = 0.5 sec
+df = 4/ts; % Ts = 4/(damp_rat * undamp_freq) => damp*freq = 4/Ts
+wn = df / damp_rat; % und_freq = (undfreq * damp) / damp
+wd = wn * sqrt(damp_rat^2 - 1); % Damped natural freq eqn.
+% Make 3rd & 4th poles (4th needed for servocontrol design) >= 10x to the
+% left of other control poles
+cpoles = [-wn + wd, -wn - wd, -10*(wn+wd), -10 * (wn-wd)];
+cpoles'
+%%  Part B
+
+a = [-36,-33,-60;-36,-34,-60;37,34,61];
+b = [1;1;-1];
+c = [0,10,10];
+d = 0;
+bsys = System(a,b,c,d);
+[numcheck, dencheck] = bsys.tf
+display('TF is the same');
+
+%% Part C
+
+cont_sys = bsys.servocontroller(cpoles);
+t = linspace(0,5,1000);
+step_in = ones(size(t));
+[y,t,x] = cont_sys.simulate(step_in,t);
+plot(t,y);
+title('CL Servocontrolled System w/o Observer');
+xlabel('time \it{(sec)}');
+cont_sys.display_ss
+cont_sys.poles
+cont_sys.stepinfo
+
+%% Part D
+
+opoles = [-115, -116, -117]; % Poles > 10x control poles
+% Simulate answer
+bsys.simulate_full_compensator(cpoles,opoles, [1,-1,1]);
+
+% Get State Matrices for Full-Order Compensator
+oc_fullsys = bsys.full_compensator(cpoles, opoles);
+
+% Simulate this system for check
+t = linspace(0,5,1000);
+stepin = ones(size(t));
+[yf,tf] = oc_fullsys.simulate(stepin,t);
+figure;
+plot(tf,yf);
+title('Fulll Order Observer Compensator w/ SS Tracking')
+
+% Check poles of system as a check
+cpoles'
+opoles'
+syspoles = oc_fullsys.poles
+display('Dominant Poles Check');
+
+% Get info about system (ie servocontroller CL K, Observer L gains)
+k = sys.servocontroller_gain(cpoles)
+l = sys.full_observer_gain(opoles)
+
+% Get CL SS Matricews
+oc_fullsys.display_ss;
+%% Part E
+
+opoles = [-115, -116]; % need 1 less pole for reduced observer
+
+%Simulate system
+bsys.simulate_reduced_compensator(cpoles, opoles, [1,-1,4]);
+
+% Get Reduced System SS 
+oc_redsys = bsys.reduced_compensator(cpoles, opoles);
+oc_redsys.display_ss
+[yr,tr,xr] = oc_redsys.simulate(stepin, t);
+figure;
+plot(tr,yr);
+% hold on;
+% plot(tf, yf, '--r');
+title('Simulated Reduced Observer-Based Compensator w/ SS Tracking');
+% Simulate this system as a check
+desired_cont_poles = cpoles'
+desired_obs_poles = opoles'
+actual_system_poles = oc_redsys.poles
+display('Dominant Poles Check');
+
+% Get info about system
+k = sys.servocontroller_gain(cpoles)
+[transform_matrix,l,e,pt,qt,j,m,n] = sys.get_all_reduced_observer_info(opoles);
+l = l
+
+% Get State Matrices
+oc_redsys.display_ss;
+
+%%
 %% Use System to make a Closed Loop system.
 
 
